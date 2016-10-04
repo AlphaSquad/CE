@@ -20,7 +20,7 @@
 
 class Cograph_Editing {
 public:
-  Graph cograph_editing (Graph& g);
+  Graph cograph_editing (Graph& g, unsigned int seed);
 private:
   Tree editTree(const Tree& t, const TVertex& v, Graph& g);
   Tree editTreeRefined(const Tree& t, const TVertex& v, Graph& g);

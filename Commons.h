@@ -7,6 +7,7 @@
 #include <boost/config.hpp>
 #include <boost/graph/graph_utility.hpp>
 #include <boost/graph/filtered_graph.hpp>
+#include <random>
 
 struct vertex_prop;
 

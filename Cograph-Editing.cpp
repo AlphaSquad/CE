@@ -394,7 +394,7 @@ float checkDoubleP4s_case2(const QVertex& v, const QVertex& w, const QVertex& v1
 }
 
 // Given a prime module mod, merge two childrens which are scored best
-int mergeModules_adjusted(const Tree& tree, const TVertex& mod, Graph& g, bool debug = false)
+int mergeModules_adjusted(const Tree& tree, const TVertex& mod, Graph& g, unsigned int seed, bool debug = false)
 {
   QGraph quotient = repGraph(tree,mod,g); // create representative graph/quotient graphs
   findP4s(quotient); // scores edges in the quotient graph
@@ -405,8 +405,10 @@ int mergeModules_adjusted(const Tree& tree, const TVertex& mod, Graph& g, bool d
   
   float score = -(float)boost::num_vertices(g) * boost::num_vertices(g) * boost::num_vertices(g) * boost::num_vertices(g);
   float final_size = 0.f;
-  std::pair<QVertex,QVertex> modules;
-  std::vector<std::pair<QVertex,QVertex> > min_op;
+  std::vector<std::pair<QVertex,QVertex> > modules;
+	std::pair<QVertex, QVertex> modulesf;
+	std::vector<std::pair<QVertex,QVertex> > min_opf;
+  std::vector<std::vector<std::pair<QVertex,QVertex> > > min_op;
   std::vector<float> score_list;
   
   for (const auto& v : boost::vertices(quotient))
@@ -422,8 +424,8 @@ int mergeModules_adjusted(const Tree& tree, const TVertex& mod, Graph& g, bool d
       // we dont want the other vertex to be part of this set
       if (diff1.size() == 0 and diff2.size() == 0)
       {
-	std::cout << boost::get(cont_t(),quotient,v)[0] << " " << boost::get(cont_t(),quotient,w)[0] << std::endl;
-	boost::write_graphviz(std::cout, quotient);
+				std::cout << boost::get(cont_t(),quotient,v)[0] << " " << boost::get(cont_t(),quotient,w)[0] << std::endl;
+				boost::write_graphviz(std::cout, quotient);
       }
       assert(diff1.size() > 0 or diff2.size() > 0); // the symmetric difference has to be > 0 else they should be the same module
       float tmp_score = 0.f;
@@ -451,7 +453,7 @@ int mergeModules_adjusted(const Tree& tree, const TVertex& mod, Graph& g, bool d
             p4s -= checkDoubleP4s_case2(v,w,p.second, tmp_op.back().second, quotient);
           }
         }
-	tmp_score += p4s;
+				tmp_score += p4s;
         tmp_score_list.push_back(p4s);
         sizes += pscore.second;
       }
@@ -484,44 +486,61 @@ int mergeModules_adjusted(const Tree& tree, const TVertex& mod, Graph& g, bool d
       
       tmp_score /= sizes;
       //std::cout << "Modules " << boost::get(cont_t(), quotient,v)[0] << " / " << boost::get(cont_t(), quotient,w)[0] << " with score: " << tmp_score << " and size: " << sizes << " (tmp score/size is: " << score << "/" << final_size << ")" <<  std::endl;
-      if (tmp_score > score or (tmp_score == score and sizes <= final_size))
+			if (tmp_score > score or (tmp_score == score and sizes <= final_size))
       {
-      	if (sizes == final_size)
-	{
-	  // choose randomly
-	  //TODO
-	}
 //         std::cout << "Modules " << boost::get(cont_t(), quotient,v)[0] << " / " << boost::get(cont_t(), quotient,w)[0] << " with score: " << tmp_score << " and size: " << sizes <<  std::endl;
-	final_size = sizes;
-	score = tmp_score;
-        score_list = tmp_score_list;
-	min_op = tmp_op;
-	modules = std::make_pair(v,w);
-      }
+				if (tmp_score == score and sizes == final_size)
+				{
+					min_op.push_back(tmp_op);
+					modules.push_back(std::make_pair(v,w));
+				} 
+				else
+				{
+					min_op = {tmp_op};
+					modules = {std::make_pair(v,w)};
+				}
+				final_size = sizes;
+				score = tmp_score;
+        score_list = tmp_score_list; // this is currently not correctly being updated TODO
+			}
     }
+	if (modules.size() > 1)
+	{
+		std::mt19937 generator;
+		generator.seed(seed);
+		std::uniform_int_distribution<unsigned int> uni(0,modules.size() - 1);
+		unsigned int pos = uni(generator);
+		modulesf = modules[pos];
+		min_opf = min_op[pos];
+	}
+	else
+	{
+		modulesf = modules[0];
+		min_opf = min_op[0];
+	}
 //   std::cout << "Score: " << score*min_op.size() << std::endl;
   int edits = 0;
   // DEBUG
   if (false)
   {
-    for (const auto& v : boost::get(cont_t(), quotient, modules.first))
+    for (const auto& v : boost::get(cont_t(), quotient, modulesf.first))
       std::cout << v << " ";
     std::cout << "merged with ";
-    for (const auto& v : boost::get(cont_t(), quotient, modules.second))
+    for (const auto& v : boost::get(cont_t(), quotient, modulesf.second))
       std::cout << v << " ";
     std::cout << std::endl;
     std::cout << "(scored " << score << ", individual scores ";
     for (const auto& s : score_list)
       std::cout << s << " ";
     std::cout << " with edits: ";
-    for (const auto& e : min_op)
+    for (const auto& e : min_opf)
       std::cout << ((boost::edge(e.first,e.second,quotient).second) ? "Removed: " : "Added: ") << boost::get(cont_t(),quotient, e.first)[0] << " - " << boost::get(cont_t(), quotient, e.second)[0] << " ";
 //      std::cout << " (score reduced by: " << reduced << ")" << std::endl;
     std::cout << ")" << std::endl;
   }
-  assert(modules.first != modules.second);
+  assert(modulesf.first != modulesf.second);
   
-  for (const auto& e : min_op)
+  for (const auto& e : min_opf)
     edits += editEdge(e.first, e.second, quotient, g);
   
 //   std::cout << std::endl;
@@ -554,9 +573,9 @@ int editSpider (const Tree& tree, const TVertex& mod, Graph& g)
     {
       int deg = boost::degree(getCorr(v,tree),g);
       if (deg < min_degree) // Find out legs [thin spider]
-	min_degree = deg;
+				min_degree = deg;
       if (deg > max_degree)
-	max_degree = deg;
+				max_degree = deg;
     }
   }
   std::vector<TVertex> legs;
@@ -578,16 +597,16 @@ int editSpider (const Tree& tree, const TVertex& mod, Graph& g)
       if (boost::edge(getCorr(v,tree),getCorr(v_,tree),g).second)
       {
 // 	std::cout << "Removed: " << getCorr(v,tree) << " - " << getCorr(v_,tree) << std::endl;
-	boost::remove_edge(getCorr(v,tree), getCorr(v_,tree),g);
-	ct--;
-	break;
+				boost::remove_edge(getCorr(v,tree), getCorr(v_,tree),g);
+				ct--;
+				break;
       }
     }
   }
   return (legs.size() - 1);
 }
 
-Graph cograph_editing_adjusted(Graph g)
+Graph cograph_editing_adjusted(Graph g, unsigned int seed)
 {  
   ModDecomp mod;
   clock_t w = clock();
@@ -609,24 +628,24 @@ Graph cograph_editing_adjusted(Graph g)
     {
       if (boost::get(modType, *vi) == "Spider")
       {
-	// EDP4
-	TVertex module = *vi;
-	edits += editSpider(decomp, module, g);
+				// EDP4
+				TVertex module = *vi;
+				edits += editSpider(decomp, module, g);
       }
       if (boost::get(modType, *vi) == "Prime") // edit here!
       {
-	TVertex module = *vi;
-	w = clock();
-	int n_edits = mergeModules_adjusted(decomp, module, g);
+				TVertex module = *vi;
+				w = clock();
+				int n_edits = mergeModules_adjusted(decomp, module, g, seed);
 // 	int n_edits = edit(decomp, module, g);
-	edits += n_edits;
-	if (n_edits == 0)
-	{
-	  std::cerr << "Unable to edit graph: " << std::endl;
-	  printModDecomp(decomp);
-	  return g;
-	}
-	w = clock() - w;
+				edits += n_edits;
+				if (n_edits == 0)
+				{
+	  			std::cerr << "Unable to edit graph: " << std::endl;
+	  			printModDecomp(decomp);
+	  			return g;
+				}
+			w = clock() - w;
 // 	std::cout << "Merging took " << w/1000 << "ms" << std::endl;
       }
     }
@@ -672,22 +691,33 @@ int main(int, char* argv[])
 //   ss.close();
    
   /* run */
-  BuildGraphs builder(0,false); // no random required
+  // random is just a quick&dirty solution
+  unsigned int seed = atoi(argv[3]);
+  if (!seed)
+  {
+  	std::random_device rd;
+  	seed = rd();
+  }
+
+  BuildGraphs builder(seed,false); // no random required
   std::vector<Graph> graphs = builder.readGraphs(argv[1]);
   clock_t t = clock();
   int i = 0;
-  std::vector<Graph> out;
+  int tot = 0;
+	std::vector<Graph> out;
   std::vector<std::pair<int,int> > props;
   for (auto& g : graphs)
   {
-    std::cerr << "Component: " << (++i) << std::endl;
+    //std::cerr << "Component: " << (++i) << std::endl;
     t = clock();
-    Graph h = cograph_editing_adjusted(g);
+    Graph h = cograph_editing_adjusted(g, seed);
     t = (clock() - t)/1000;
     int edits = builder.calculateEditDistance(g,h);
-    props.push_back(std::make_pair(edits,t));
+    tot += edits;
+		props.push_back(std::make_pair(edits,t));
     out.push_back(h);
-  }  
+  } 
+	std::cout << tot << std::endl;
   builder.writeGraphs(out, argv[2], props);
   
   /* run MD */
