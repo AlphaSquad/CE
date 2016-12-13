@@ -7,11 +7,11 @@ set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 find_package(Boost 1.55 COMPONENTS program_options REQUIRED)
 
 include_directories(
-	${Boost_INCLUDE_DIR}
+	${Boost_INCLUDE_DIRS}
 )
 
 link_directories(
-	${Boost_LIBRARYDIR}
+	${Boost_LIBRARY_DIRS}
 )
 
 set(COMPILER_FLAGS
